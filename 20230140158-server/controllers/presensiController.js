@@ -53,7 +53,6 @@
  	    const { id: userId, nama: userName } = req.user;
  	    const waktuSekarang = new Date();
  	
- 	    // Cari data di database
  	    const recordToUpdate = await Presensi.findOne({
  	      where: { userId: userId, checkOut: null },
  	    });
@@ -64,7 +63,6 @@
  	      });
  	    }
  	
- 	    // 5. Update dan simpan perubahan ke database
  	    recordToUpdate.checkOut = waktuSekarang;
  	    await recordToUpdate.save();
  	
@@ -85,6 +83,73 @@
  	    });
  	  } catch (error) {
  	    res.status(500).json({ message: "Terjadi kesalahan pada server", error: error.message });
- 	  }
+ 	  }	  
  	};
 
+	exports.deletePresensi = async (req, res) => {
+  		try {
+    		const { id: userId } = req.user;
+    		const presensiId = req.params.id;
+    		const recordToDelete = await Presensi.findByPk(presensiId);
+
+    	if (!recordToDelete) {
+      	return res
+        	.status(404)
+        	.json({ message: "Catatan presensi tidak ditemukan." });
+    	}
+    	if (recordToDelete.userId !== userId) {
+      	return res
+        	.status(403)
+        	.json({ message: "Akses ditolak: Anda bukan pemilik catatan ini." });
+    	}
+    	await recordToDelete.destroy();
+    	return res
+      		.status(200)
+      		.json({ message: "Catatan presensi berhasil dihapus." });
+  		} catch (error) {
+    	return res
+      		.status(500)
+      		.json({ message: "Terjadi kesalahan pada server", error: error.message });
+  		}
+	};
+
+	exports.updatePresensi = async (req, res) => {
+	try {
+    const presensiId = req.params.id;
+    const { checkIn, checkOut, nama } = req.body;
+
+    if (checkIn === undefined && checkOut === undefined && nama === undefined) {
+      return res.status(400).json({
+        message:
+          "Request body tidak berisi data yang valid untuk diupdate (checkIn, checkOut, atau nama).",
+      });
+    }
+
+    const formatDateTime = (date) => {
+      if (!date) return null;
+      return date.replace("T", " ").replace("Z", "");
+    };
+
+    const recordToUpdate = await Presensi.findByPk(presensiId);
+    if (!recordToUpdate) {
+      return res.status(404).json({ message: "Catatan presensi tidak ditemukan." });
+    }
+
+    recordToUpdate.checkIn = checkIn ? formatDateTime(checkIn) : recordToUpdate.checkIn;
+    recordToUpdate.checkOut = checkOut ? formatDateTime(checkOut) : recordToUpdate.checkOut;
+    recordToUpdate.nama = nama || recordToUpdate.nama;
+
+    await recordToUpdate.save(); 
+
+		res.json({
+		message: "Data presensi berhasil diperbarui.",
+		data: recordToUpdate,
+		});
+
+	} catch (error) {
+    	res.status(500).json({
+      	message: "Terjadi kesalahan pada server",
+      	error: error.message,
+    	});
+	}
+};
