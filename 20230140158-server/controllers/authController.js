@@ -5,9 +5,9 @@ const JWT_SECRET = 'INI_ADALAH_KUNCI_RAHASIA_ANDA_YANG_SANGAT_AMAN';
 
 exports.register = async (req, res) => {
   try {
-    const { nama, email, password, role } = req.body;
+    const { name, email, password, role } = req.body;
 
-    if (!nama || !email || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({ message: "Nama, email, dan password harus diisi" });
     }
 
@@ -17,7 +17,7 @@ exports.register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10); 
     const newUser = await User.create({
-      nama,
+      nama : name,
       email,
       password: hashedPassword,
       role: role || 'mahasiswa' 
