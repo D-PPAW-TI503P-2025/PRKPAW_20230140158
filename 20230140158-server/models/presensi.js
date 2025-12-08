@@ -25,9 +25,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      // kalau kamu punya kolom latitude/longitude, tambahkan di sini:
-      // latitude: DataTypes.STRING,
-      // longitude: DataTypes.STRING,
+      latitude: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      longitude: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      buktiFoto: {
+        type: DataTypes.STRING,
+        allowNull: true, // URL foto
+      },
     },
     {
       sequelize,

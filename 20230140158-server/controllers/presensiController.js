@@ -1,5 +1,32 @@
-const { Presensi, User } = require("../models");
+const multer = require("multer");
+const path = require("path");
 const { Op } = require("sequelize");
+
+// MODEL
+const { Presensi, User } = require("../models");
+
+// KONFIGURASI UPLOAD FOTO
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    cb(
+      null,
+      `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`
+    );
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Hanya file gambar yang diperbolehkan!"), false);
+  }
+};
+
+exports.upload = multer({ storage: storage, fileFilter: fileFilter });
 
 // ===========================================================
 // CHECK IN
@@ -9,6 +36,16 @@ exports.CheckIn = async (req, res) => {
     const { id: userId, nama: userName } = req.user;
     const { latitude, longitude } = req.body;
     const waktuSekarang = new Date();
+
+    if (!req.file) {
+      return res.status(400).json({
+        message: "Foto tidak terkirim. Upload foto wajib!",
+      });
+    }
+
+    const buktiFoto = `${req.protocol}://${req.get("host")}/uploads/${
+      req.file.filename
+    }`;
 
     if (!latitude || !longitude) {
       return res.status(400).json({
@@ -22,7 +59,7 @@ exports.CheckIn = async (req, res) => {
 
     if (existing) {
       return res.status(400).json({
-        message: "Anda sudah check-in hari ini.",
+        message: "Anda sudah check-in dan belum check-out.",
       });
     }
 
@@ -31,6 +68,7 @@ exports.CheckIn = async (req, res) => {
       checkIn: waktuSekarang,
       latitude,
       longitude,
+      buktiFoto,
     });
 
     res.status(201).json({
@@ -38,6 +76,7 @@ exports.CheckIn = async (req, res) => {
       data: record,
     });
   } catch (error) {
+    console.error("CHECKIN SERVER ERROR:", error);
     res.status(500).json({
       message: "Server error",
       error: error.message,
@@ -50,91 +89,38 @@ exports.CheckIn = async (req, res) => {
 // ===========================================================
 exports.CheckOut = async (req, res) => {
   try {
-    const { id: userId } = req.user;
+    const { id: userId, nama: userName } = req.user;
     const waktuSekarang = new Date();
 
+    // Cari presensi yang belum checkout
     const record = await Presensi.findOne({
-      where: { userId, checkOut: null },
+      where: { userId, checkOut: null }
     });
 
     if (!record) {
       return res.status(404).json({
-        message: "Tidak ada check-in aktif.",
+        message: "Anda belum check-in atau sudah check-out."
       });
     }
 
+    // Set waktu check-out
     record.checkOut = waktuSekarang;
     await record.save();
 
-    res.json({
-      message: "Check-out berhasil.",
-      data: record,
+    return res.json({
+      message: `Check-out berhasil untuk ${userName}.`,
+      data: record
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("CHECKOUT SERVER ERROR:", error);
+    return res.status(500).json({
       message: "Server error",
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-// ===========================================================
-// UPDATE
-// ===========================================================
-exports.updatePresensi = async (req, res) => {
-  try {
-    const presensiId = req.params.id;
-    const { checkIn, checkOut } = req.body;
 
-    const record = await Presensi.findByPk(presensiId);
-
-    if (!record) {
-      return res.status(404).json({
-        message: "Presensi tidak ditemukan.",
-      });
-    }
-
-    if (checkIn) record.checkIn = new Date(checkIn);
-    if (checkOut) record.checkOut = new Date(checkOut);
-
-    await record.save();
-
-    res.json({
-      message: "Presensi berhasil diupdate",
-      data: record,
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
-  }
-};
-
-// ===========================================================
-// DELETE
-// ===========================================================
-exports.deletePresensi = async (req, res) => {
-  try {
-    const presensiId = req.params.id;
-
-    const record = await Presensi.findByPk(presensiId);
-    if (!record) {
-      return res.status(404).json({
-        message: "Presensi tidak ditemukan.",
-      });
-    }
-
-    await record.destroy();
-
-    res.json({ message: "Presensi berhasil dihapus." });
-  } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
-  }
-};
 
 // ===========================================================
 // REPORT HARIAN
@@ -165,8 +151,33 @@ exports.getDailyReport = async (req, res) => {
       data,
     });
   } catch (error) {
+    console.error("REPORT SERVER ERROR:", error);
     res.status(500).json({
       message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+// ===========================================================
+// DELETE PRESENSI
+// ===========================================================
+exports.deletePresensi = async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const record = await Presensi.findByPk(id);
+    if (!record) {
+      return res.status(404).json({ message: "Data presensi tidak ditemukan." });
+    }
+
+    await record.destroy();
+
+    return res.json({ message: "Data presensi berhasil dihapus." });
+  } catch (error) {
+    console.error("DELETE SERVER ERROR:", error);
+    return res.status(500).json({
+      message: "Gagal menghapus presensi",
       error: error.message,
     });
   }

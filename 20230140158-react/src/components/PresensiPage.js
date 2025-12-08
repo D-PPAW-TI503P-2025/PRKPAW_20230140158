@@ -1,133 +1,238 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
+import Webcam from "react-webcam";
+
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import icon from "leaflet/dist/images/marker-icon.png";
+import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 
+L.Marker.prototype.options.icon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconRetinaUrl: icon,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41],
+});
+
 function PresensiPage() {
-  const [coords, setCoords] = useState(null);
-  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const [coords, setCoords] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [image, setImage] = useState(null);
+  const webcamRef = useRef(null);
+
+  const capture = useCallback(() => {
+    const img = webcamRef.current.getScreenshot();
+    setImage(img);
+  }, []);
+
+  const getToken = () => localStorage.getItem("token");
+
+  // Base64 -> File
+  function dataURLtoFile(dataurl, filename) {
+    let arr = dataurl.split(",");
+    let mime = arr[0].match(/:(.*?);/)[1];
+    let bstr = atob(arr[1]);
+    let n = bstr.length;
+    let u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  const getLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation tidak didukung browser.");
+      setIsLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setIsLoading(false);
+      },
+      (err) => {
+        setError("Gagal mendapatkan lokasi: " + err.message);
+        setIsLoading(false);
+      }
+    );
+  };
 
   useEffect(() => {
     getLocation();
   }, []);
 
-  const getLocation = () => {
-    if (!navigator.geolocation) {
-      setError("Browser tidak mendukung geolocation.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-      },
-      (err) => {
-        setError("Lokasi tidak bisa didapatkan: " + err.message);
-      }
-    );
-  };
-
+  // =========================
+  // CHECK-IN DENGAN FOTO
+  // =========================
   const handleCheckIn = async () => {
-    if (!coords) {
-      setError("Lokasi belum tersedia.");
+    setError("");
+    setMessage("");
+
+    if (!coords || !image) {
+      setError("Lokasi dan foto wajib ada!");
       return;
     }
-
-    const token = localStorage.getItem("token");
-    const config = {
-      headers: { Authorization: `Bearer ${token}` },
-    };
 
     try {
-      const res = await axios.post(
-        "http://localhost:5001/api/presensi/check-in",
+      const token = getToken();
+      if (!token) {
+        setError("Token tidak ditemukan, silakan login ulang.");
+        return;
+      }
+
+      const file = dataURLtoFile(image, "selfie.jpg");
+
+      const formData = new FormData();
+      formData.append("latitude", coords.lat);
+      formData.append("longitude", coords.lng);
+      // NAMA FIELD HARUS SAMA DENGAN MULTER
+      formData.append("buktiFoto", file);
+
+      const response = await axios.post(
+        "http://localhost:5001/api/presensi/checkin",
+        formData,
         {
-          latitude: coords.lat,
-          longitude: coords.lng,
-        },
-        config
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
 
-      setMessage(res.data.message);
-      setError("");
+      setMessage(response.data.message);
     } catch (err) {
-      setError(err.response?.data?.message || "Gagal check-in");
+      console.error("CHECKIN ERROR:", err.response?.data || err.message);
+      setError(err.response?.data?.message || "Server error");
     }
   };
 
+  // =========================
+  // CHECK-OUT
+  // =========================
   const handleCheckOut = async () => {
-    if (!coords) {
-      setError("Lokasi belum tersedia.");
-      return;
-    }
-
-    const token = localStorage.getItem("token");
+    setError("");
+    setMessage("");
 
     try {
-      const res = await axios.post(
-        "http://localhost:5001/api/presensi/check-out",
+      const token = getToken();
+      if (!token) {
+        setError("Token tidak ditemukan, silakan login ulang.");
+        return;
+      }
+
+      const response = await axios.post(
+        "http://localhost:5001/api/presensi/checkout",
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      setMessage(res.data.message);
-      setError("");
+      setMessage(response.data.message);
     } catch (err) {
-      setError(err.response?.data?.message || "Gagal check-out");
+      console.error("CHECKOUT ERROR:", err.response?.data || err.message);
+      setError(err.response?.data?.message || "Server error");
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Halaman Presensi</h2>
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center pt-10 pb-10">
+      {isLoading ? (
+        <div className="bg-white p-10 rounded-lg shadow-md w-full max-w-6xl mb-8 text-center">
+          <p className="text-xl font-semibold text-blue-600 animate-pulse">
+            Memuat lokasi...
+          </p>
+          {error && <p className="text-red-600 mt-4">{error}</p>}
+        </div>
+      ) : (
+        <div className="bg-white p-4 rounded-lg shadow-md w-full mb-8 px-8 max-w-6xl">
+          <h3 className="text-xl font-semibold mb-2">Lokasi Anda:</h3>
+          <div className="my-4 border rounded-lg overflow-hidden">
+            <MapContainer
+              center={[coords.lat, coords.lng]}
+              zoom={15}
+              style={{ height: "300px", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Marker position={[coords.lat, coords.lng]}>
+                <Popup>Lokasi Presensi Anda</Popup>
+              </Marker>
+            </MapContainer>
+          </div>
+        </div>
+      )}
 
-      {/* MAP */}
-      <div className="mb-4 bg-white p-4 shadow rounded-lg">
-        <h3 className="font-semibold mb-2">Lokasi Terdeteksi:</h3>
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md text-center">
+        <h2 className="text-3xl font-bold mb-6">Lakukan Presensi</h2>
 
-        {coords ? (
-          <MapContainer
-            center={[coords.lat, coords.lng]}
-            zoom={16}
-            style={{ height: "300px", width: "100%" }}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        <div className="my-4 border rounded-lg overflow-hidden bg-black flex justify-center">
+          {image ? (
+            <img
+              src={image}
+              alt="Selfie"
+              className="w-[480px] h-[360px] object-cover"
             />
-            <Marker position={[coords.lat, coords.lng]}>
-              <Popup>Lokasi Anda</Popup>
-            </Marker>
-          </MapContainer>
+          ) : (
+            <Webcam
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              className="w-[480px] h-[360px]"
+              videoConstraints={{
+                width: 480,
+                height: 360,
+                facingMode: "user",
+              }}
+            />
+          )}
+        </div>
+
+        {!image ? (
+          <button
+            onClick={capture}
+            className="w-full py-2 mb-4 bg-blue-600 text-white rounded"
+          >
+            Ambil Foto 📸
+          </button>
         ) : (
-          <p className="text-gray-500">Mengambil lokasi...</p>
+          <button
+            onClick={() => setImage(null)}
+            className="w-full py-2 mb-4 bg-gray-600 text-white rounded"
+          >
+            Foto Ulang 🔄
+          </button>
         )}
-      </div>
 
-      {/* MESSAGES */}
-      {error && <p className="text-red-600 mb-2">{error}</p>}
-      {message && <p className="text-green-600 mb-2">{message}</p>}
+        {message && <p className="text-green-600 mb-4">{message}</p>}
+        {error && <p className="text-red-600 mb-4">{error}</p>}
 
-      {/* BUTTONS */}
-      <div className="flex gap-4">
-        <button
-          onClick={handleCheckIn}
-          className="bg-green-600 text-white px-4 py-2 rounded"
-        >
-          Check-In
-        </button>
+        <div className="flex space-x-4">
+          <button
+            onClick={handleCheckIn}
+            className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold"
+          >
+            Check-In
+          </button>
 
-        <button
-          onClick={handleCheckOut}
-          className="bg-red-600 text-white px-4 py-2 rounded"
-        >
-          Check-Out
-        </button>
+          <button
+            onClick={handleCheckOut}
+            className="w-full py-3 bg-red-600 text-white rounded-lg font-semibold"
+          >
+            Check-Out
+          </button>
+        </div>
       </div>
     </div>
   );
