@@ -10,6 +10,7 @@ const presensiRoutes = require("./routes/presensi");
 const reportRoutes = require("./routes/reports");
 const authRoutes = require("./routes/auth");
 const ruteBuku = require("./routes/books");
+const iotRoutes = require("./routes/iot");
 
 // MIDDLEWARE
 app.use(cors());
@@ -29,6 +30,7 @@ app.use("/api/books", ruteBuku);
 app.use("/api/presensi", presensiRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/iot", iotRoutes);
 
 // RUN SERVER
 app.listen(PORT, () => {

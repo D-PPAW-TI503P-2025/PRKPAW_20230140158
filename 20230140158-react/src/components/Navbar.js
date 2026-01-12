@@ -24,6 +24,7 @@ function Navbar() {
 
      <div className="flex space-x-6">
        <Link to="/dashboard">Dashboard</Link>
+       <Link to="/monitoring" className="...">Monitoring Sensor</Link>
        <Link to="/presensi">Presensi</Link>
 
        {user?.role === "admin" && (

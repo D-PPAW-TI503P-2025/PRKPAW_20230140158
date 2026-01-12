@@ -7,6 +7,7 @@ import DashboardPage from "./components/DashboardPage";
 import PresensiPage from "./components/PresensiPage";
 import ReportPage from "./components/ReportPage";
 import Navbar from "./components/Navbar";
+import SensorPage from "./components/SensorPage";
 
 function App() {
   return (
@@ -53,6 +54,17 @@ function App() {
         {/* Default */}
         <Route path="/" element={<LoginPage />} />
 
+        <Route
+  path="/monitoring"
+  element={
+    <>
+      <Navbar />
+      <SensorPage />
+    </>
+  }
+/>
+
+        
       </Routes>
     </Router>
   );
